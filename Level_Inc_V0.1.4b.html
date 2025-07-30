@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>XP Particles with Momentum Loss & Levelize</title>
+  <style>
+    body {
+      margin: 20px;
+      font-family: sans-serif;
+      overflow: hidden;
+    }
+    #tabs {
+      margin-bottom: 10px;
+    }
+    .tab-button {
+      padding: 6px 12px;
+      margin-right: 6px;
+      border: 1px solid #000;
+      background-color: #eee;
+      cursor: pointer;
+      user-select: none;
+      border-radius: 4px;
+    }
+    .tab-button.active {
+      background-color: #ccc;
+      font-weight: bold;
+    }
+    .tab-button.teal {
+      background-color: teal;
+      color: white;
+    }
+    #xp-wrapper {
+      display: flex;
+      align-items: center;
+      position: relative;
+      margin-top: 10px;
+    }
+    #levelize-tab {
+      display: none;
+      margin-top: 10px;
+    }
+    #xp-container {
+      width: 400px;
+      height: 30px;
+      border: 2px solid #000;
+      background-color: #ddd;
+      position: relative;
+      border-radius: 15px;
+      overflow: hidden;
+      margin-right: 10px;
+    }
+    #xp-bar {
+      height: 100%;
+      background-color: #2196f3;
+      width: 0%;
+      position: absolute;
+      top: 0;
+      left: 0;
+      transition: width 0.3s ease;
+    }
+    #xp-text {
+      position: absolute;
+      width: 100%;
+      text-align: center;
+      line-height: 30px;
+      font-weight: bold;
+      z-index: 1;
+    }
+    #condensed-level-text {
+      margin-bottom: 4px;
+      font-weight: bold;
+      font-size: 14px;
+      color: teal;
+      display: none;
+      user-select: none;
+    }
+    #level-box {
+      width: 30px;
+      height: 30px;
+      background-color: #444;
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      border-radius: 5px;
+      position: relative;
+    }
+    .particle {
+      position: absolute;
+      width: 6px;
+      height: 6px;
+      background-color: #2196f3;
+      border-radius: 50%;
+      pointer-events: none;
+      opacity: 1;
+    }
+    #collapse-message {
+      font-weight: bold;
+      font-size: 20px;
+      margin-bottom: 12px;
+    }
+    #levelize-button {
+      background-color: teal;
+      color: white;
+      border: none;
+      padding: 16px 24px;
+      font-size: 24px;
+      font-weight: bold;
+      border-radius: 12px;
+      cursor: pointer;
+      user-select: none;
+    }
+    #levelize-upgrades {
+      margin-top: 20px;
+      font-weight: bold;
+      color: teal;
+      user-select: none;
+    }
+    #levelize-upgrades button {
+      background-color: teal;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      font-size: 18px;
+      font-weight: bold;
+      border-radius: 8px;
+      cursor: pointer;
+      margin-top: 8px;
+    }
+  </style>
+</head>
+<body>
+
+<h2>XP System</h2>
+
+<div id="tabs">
+  <button id="main-tab-btn" class="tab-button active">Main</button>
+  <button id="levelize-tab-btn" class="tab-button teal" style="display:none;">Levelize</button>
+</div>
+
+<div id="main-tab">
+  <div id="condensed-level-text">Condensed Levels: 0</div>
+  <div id="xp-wrapper">
+    <div id="xp-container">
+      <div id="xp-bar"></div>
+      <div id="xp-text">XP: 0 / 5</div>
+    </div>
+    <div id="level-box">1</div>
+  </div>
+</div>
+
+<div id="levelize-tab">
+  <div id="collapse-message">Levelize will reset XP and level but gives you Condensed levels, which can be spent on upgrades! Doing this requires at least Level 10.</div>
+  <button id="levelize-button">Levelize, requires level 10.</button>
+  <div id="levelize-upgrades" style="display:none;">
+    <div>Upgrade: Double XP Gain</div>
+    <div>Cost: <span id="upgrade-cost">1</span> CL</div>
+    <button id="buy-upgrade-btn">Buy Upgrade</button>
+    <div style="margin-top:12px;">
+      <div>Upgrade: Faster XP Ticks (once only)</div>
+      <div>Cost: 5 CL</div>
+      <button id="buy-faster-ticks-btn">Buy Upgrade</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let xp = 0;
+let level = 1;
+let baseXP = 5;
+let condensedLevels = 0;
+let levelizeUnlocked = false;
+
+let xpMultiplier = 1;
+let upgradeCost = 1;
+let upgradeBoughtCount = 0;
+let maxLevel = 10;
+
+let fasterTicksBought = false;
+let tickInterval = 1000;
+let xpTickIntervalId;
+
+const wrapper = document.getElementById("xp-wrapper");
+const levelBox = document.getElementById("level-box");
+const condensedLevelText = document.getElementById("condensed-level-text");
+const xpBar = document.getElementById("xp-bar");
+const xpText = document.getElementById("xp-text");
+
+const mainTabBtn = document.getElementById("main-tab-btn");
+const levelizeTabBtn = document.getElementById("levelize-tab-btn");
+const mainTab = document.getElementById("main-tab");
+const levelizeTab = document.getElementById("levelize-tab");
+
+const collapseMessage = document.getElementById("collapse-message");
+const levelizeButton = document.getElementById("levelize-button");
+const levelizeUpgrades = document.getElementById("levelize-upgrades");
+const upgradeCostSpan = document.getElementById("upgrade-cost");
+const buyUpgradeBtn = document.getElementById("buy-upgrade-btn");
+const buyFasterTicksBtn = document.getElementById("buy-faster-ticks-btn");
+
+function calculateCLGain() {
+  if (level < 10) return 0;
+  return Math.pow(2, Math.floor((level - 10) / 3));
+}
+
+function updateLevelizeButtonText() {
+  const clGain = calculateCLGain();
+  levelizeButton.innerText = `Levelize (+${clGain} CL)`;
+}
+
+mainTabBtn.addEventListener("click", () => {
+  mainTab.style.display = "block";
+  levelizeTab.style.display = "none";
+  mainTabBtn.classList.add("active");
+  levelizeTabBtn.classList.remove("active");
+});
+
+levelizeTabBtn.addEventListener("click", () => {
+  mainTab.style.display = "none";
+  levelizeTab.style.display = "block";
+  mainTabBtn.classList.remove("active");
+  levelizeTabBtn.classList.add("active");
+});
+
+function getXPRequired(level) {
+  return Math.floor(baseXP * Math.pow(1.5, level - 1));
+}
+
+function updateXPBar() {
+  const required = getXPRequired(level);
+  const percent = Math.min((xp / required) * 100, 100);
+  xpBar.style.width = percent + "%";
+  xpText.innerText = `XP: ${xp} / ${required}`;
+  levelBox.innerText = level;
+}
+
+function updateCondensedLevelText() {
+  if (condensedLevels > 0) {
+    condensedLevelText.style.display = "block";
+    condensedLevelText.innerText = `Condensed Levels: ${condensedLevels}`;
+  } else {
+    condensedLevelText.style.display = "none";
+  }
+}
+
+function spawnParticles() {
+  const rect = levelBox.getBoundingClientRect();
+  const parentRect = wrapper.getBoundingClientRect();
+  const centerX = rect.left - parentRect.left + rect.width / 2;
+  const centerY = rect.top - parentRect.top + rect.height / 2;
+
+  const count = Math.floor(Math.random() * 21) + 30;
+
+  for (let i = 0; i < count; i++) {
+    const particle = document.createElement("div");
+    particle.className = "particle";
+    wrapper.appendChild(particle);
+
+    let x = centerX;
+    let y = centerY;
+
+    let angle = Math.random() * Math.PI * 2;
+    let speed = Math.random() * 3 + 1;
+    let vx = Math.cos(angle) * speed;
+    let vy = Math.sin(angle) * speed - 1;
+
+    let opacity = 1;
+    let gravity = 0.1;
+    const damping = 0.95;
+
+    const interval = setInterval(() => {
+      x += vx;
+      y += vy;
+      vy += gravity;
+
+      if (vy > 0) {
+        vx *= damping;
+        vy *= damping;
+      }
+
+      opacity -= 0.02;
+
+      particle.style.left = `${x}px`;
+      particle.style.top = `${y}px`;
+      particle.style.opacity = opacity;
+
+      if (opacity <= 0) {
+        clearInterval(interval);
+        particle.remove();
+      }
+    }, 16);
+  }
+}
+
+function collapseXPSystem() {
+  mainTab.style.display = "none";
+  levelizeTab.style.display = "block";
+  collapseMessage.innerText = "Levelize will reset XP and level but gives you Condensed levels, which can be spent on upgrades! Doing this requires at least Level 10.";
+  updateLevelizeButtonText();
+  collapseMessage.style.display = "block";
+  levelizeButton.style.display = "block";
+}
+
+function gainXP(amount) {
+  if (level >= maxLevel) return;
+
+  const totalMultiplier = xpMultiplier * Math.pow(1.1, Math.max(level - 1, 0));
+  xp += amount * totalMultiplier;
+
+  let required = getXPRequired(level);
+
+  while (xp >= required && level < maxLevel) {
+    xp -= required;
+    level++;
+    spawnParticles();
+    required = getXPRequired(level);
+  }
+
+  xp = Math.round(xp * 10) / 10;
+
+  updateXPBar();
+  updateLevelizeButtonText();
+  saveProgress();
+
+  if (level >= 10 && maxLevel === 10) {
+    collapseXPSystem();
+  }
+}
+
+function levelize() {
+  if (level < 10) {
+    alert("You need to be level 10 to levelize.");
+    return;
+  }
+  const clGain = calculateCLGain();
+  condensedLevels += clGain;
+  xp = 0;
+  level = 1;
+  xpMultiplier = Math.pow(2, upgradeBoughtCount);
+
+  updateCondensedLevelText();
+  saveProgress();
+  updateXPBar();
+  updateLevelizeButtonText();
+
+  maxLevel = 100;
+  if (!levelizeUnlocked) {
+    levelizeUnlocked = true;
+    levelizeTabBtn.style.display = "inline-block";
+    mainTab.style.display = "none";
+    levelizeTab.style.display = "block";
+    mainTabBtn.classList.remove("active");
+    levelizeTabBtn.classList.add("active");
+    levelizeButton.innerText = "Levelize, requires level 10.";
+    levelizeUpgrades.style.display = "block";
+    updateLevelizeButtonText();
+  }
+}
+
+levelizeButton.addEventListener("click", levelize);
+
+buyUpgradeBtn.addEventListener("click", () => {
+  if (condensedLevels >= upgradeCost) {
+    condensedLevels -= upgradeCost;
+    upgradeBoughtCount++;
+    upgradeCost = Math.floor(upgradeCost * 3);
+    xpMultiplier = Math.pow(2, upgradeBoughtCount);
+    updateCondensedLevelText();
+    upgradeCostSpan.innerText = upgradeCost;
+    saveProgress();
+  } else {
+    alert("Not enough Condensed Levels!");
+  }
+});
+
+buyFasterTicksBtn.addEventListener("click", () => {
+  if (fasterTicksBought) {
+    alert("You already bought this upgrade.");
+    return;
+  }
+  if (condensedLevels >= 5) {
+    condensedLevels -= 5;
+    fasterTicksBought = true;
+    tickInterval = 500;
+    clearInterval(xpTickIntervalId);
+    xpTickIntervalId = setInterval(() => {
+      gainXP(1);
+    }, tickInterval);
+    updateCondensedLevelText();
+    buyFasterTicksBtn.disabled = true;
+    buyFasterTicksBtn.style.opacity = "0.5";
+    buyFasterTicksBtn.style.cursor = "default";
+    buyFasterTicksBtn.previousElementSibling.innerHTML = '<div style="color: gray;">BOUGHT</div>';
+    saveProgress();
+  } else {
+    alert("Not enough Condensed Levels!");
+  }
+  if (fasterTicksBought) {
+    alert("You already bought this upgrade.");
+    return;
+  }
+  if (condensedLevels >= 5) {
+    condensedLevels -= 5;
+    fasterTicksBought = true;
+    tickInterval = 500;
+    clearInterval(xpTickIntervalId);
+    xpTickIntervalId = setInterval(() => {
+      gainXP(1);
+    }, tickInterval);
+    updateCondensedLevelText();
+    saveProgress();
+  } else {
+    alert("Not enough Condensed Levels!");
+  }
+});
+
+function saveProgress() {
+  localStorage.setItem("xp_data", JSON.stringify({
+    xp,
+    level,
+    condensedLevels,
+    upgradeBoughtCount,
+    maxLevel,
+    fasterTicksBought
+  }));
+}
+
+function loadProgress() {
+  const data = JSON.parse(localStorage.getItem("xp_data"));
+  if (data) {
+    xp = data.xp || 0;
+    level = data.level || 1;
+    condensedLevels = data.condensedLevels || 0;
+    upgradeBoughtCount = data.upgradeBoughtCount || 0;
+    maxLevel = data.maxLevel || 10;
+    fasterTicksBought = data.fasterTicksBought || false;
+    xpMultiplier = Math.pow(2, upgradeBoughtCount);
+    if (fasterTicksBought) {
+      tickInterval = 500;
+      buyFasterTicksBtn.disabled = true;
+      buyFasterTicksBtn.style.opacity = "0.5";
+      buyFasterTicksBtn.style.cursor = "default";
+      buyFasterTicksBtn.previousElementSibling.innerHTML = '<div style="color: gray;">BOUGHT</div>';
+    }
+    updateXPBar();
+  updateLevelizeButtonText();
+    updateCondensedLevelText();
+    upgradeCost = Math.floor(1 * Math.pow(3, upgradeBoughtCount));
+    upgradeCostSpan.innerText = upgradeCost;
+    updateLevelizeButtonText();
+    if (condensedLevels > 0 || levelizeUnlocked || maxLevel > 10) {
+      levelizeUnlocked = true;
+      levelizeTabBtn.style.display = "inline-block";
+      levelizeUpgrades.style.display = "block";
+      updateLevelizeButtonText();
+    }
+  }
+}
+
+window.addEventListener("beforeunload", saveProgress);
+loadProgress();
+
+xpTickIntervalId = setInterval(() => {
+  gainXP(1);
+}, tickInterval);
+</script>
+
+</body>
+</html>
