@@ -128,6 +128,19 @@
       cursor: pointer;
       margin-top: 8px;
     }
+    .upgrade-section {
+      margin-top: 16px;
+    }
+    .upgrade-cost {
+      font-weight: normal;
+    }
+    .gray-text {
+      color: gray;
+    }
+    .disabled-btn {
+      opacity: 0.5;
+      cursor: default;
+    }
   </style>
 </head>
 <body>
@@ -154,13 +167,21 @@
   <div id="collapse-message">Levelize will reset XP and level but gives you Condensed levels, which can be spent on upgrades! Doing this requires at least Level 10.</div>
   <button id="levelize-button">Levelize, requires level 10.</button>
   <div id="levelize-upgrades" style="display:none;">
-    <div>Upgrade: Double XP Gain</div>
-    <div>Cost: <span id="upgrade-cost">1</span> CL</div>
-    <button id="buy-upgrade-btn">Buy Upgrade</button>
-    <div style="margin-top:12px;">
+    <div class="upgrade-section">
+      <div>Upgrade: Double XP Gain</div>
+      <div class="upgrade-cost">Cost: <span id="upgrade-cost">1</span> CL</div>
+      <button id="buy-upgrade-btn">Buy Upgrade</button>
+    </div>
+    <div class="upgrade-section">
       <div>Upgrade: Faster XP Ticks (once only)</div>
-      <div>Cost: 5 CL</div>
+      <div class="upgrade-cost">Cost: 5 CL</div>
       <button id="buy-faster-ticks-btn">Buy Upgrade</button>
+    </div>
+    <div class="upgrade-section">
+      <div>Upgrade: Reduced Starting XP Requirement</div>
+      <div class="upgrade-cost" id="upgrade3-cost-text">Cost: <span id="upgrade3-cost">10</span> CL</div>
+      <button id="buy-upgrade3-btn">Buy Upgrade</button>
+      <div style="margin-top:4px;">Each purchase decreases base XP requirement by 1 (min 1). Max 2 purchases.</div>
     </div>
   </div>
 </div>
@@ -181,6 +202,9 @@ let fasterTicksBought = false;
 let tickInterval = 1000;
 let xpTickIntervalId;
 
+let upgrade3BoughtCount = 0;
+const upgrade3Costs = [10, 50];
+
 const wrapper = document.getElementById("xp-wrapper");
 const levelBox = document.getElementById("level-box");
 const condensedLevelText = document.getElementById("condensed-level-text");
@@ -198,6 +222,10 @@ const levelizeUpgrades = document.getElementById("levelize-upgrades");
 const upgradeCostSpan = document.getElementById("upgrade-cost");
 const buyUpgradeBtn = document.getElementById("buy-upgrade-btn");
 const buyFasterTicksBtn = document.getElementById("buy-faster-ticks-btn");
+
+const upgrade3CostSpan = document.getElementById("upgrade3-cost");
+const buyUpgrade3Btn = document.getElementById("buy-upgrade3-btn");
+const upgrade3CostText = document.getElementById("upgrade3-cost-text");
 
 function calculateCLGain() {
   if (level < 10) return 0;
@@ -224,7 +252,7 @@ levelizeTabBtn.addEventListener("click", () => {
 });
 
 function getXPRequired(level) {
-  return Math.floor(baseXP * Math.pow(1.5, level - 1));
+  return Math.floor(Math.max(1, baseXP) * Math.pow(1.5, level - 1));
 }
 
 function updateXPBar() {
@@ -389,26 +417,37 @@ buyFasterTicksBtn.addEventListener("click", () => {
     }, tickInterval);
     updateCondensedLevelText();
     buyFasterTicksBtn.disabled = true;
-    buyFasterTicksBtn.style.opacity = "0.5";
-    buyFasterTicksBtn.style.cursor = "default";
+    buyFasterTicksBtn.classList.add("disabled-btn");
     buyFasterTicksBtn.previousElementSibling.innerHTML = '<div style="color: gray;">BOUGHT</div>';
     saveProgress();
   } else {
     alert("Not enough Condensed Levels!");
   }
-  if (fasterTicksBought) {
-    alert("You already bought this upgrade.");
+});
+
+function updateUpgrade3UI() {
+  if (upgrade3BoughtCount >= 2) {
+    upgrade3CostText.innerHTML = '<span class="gray-text">MAXED!</span>';
+    buyUpgrade3Btn.disabled = true;
+    buyUpgrade3Btn.classList.add("disabled-btn");
+  } else {
+    upgrade3CostSpan.innerText = upgrade3Costs[upgrade3BoughtCount];
+  }
+}
+
+buyUpgrade3Btn.addEventListener("click", () => {
+  if (upgrade3BoughtCount >= 2) {
+    alert("Already maxed.");
     return;
   }
-  if (condensedLevels >= 5) {
-    condensedLevels -= 5;
-    fasterTicksBought = true;
-    tickInterval = 500;
-    clearInterval(xpTickIntervalId);
-    xpTickIntervalId = setInterval(() => {
-      gainXP(1);
-    }, tickInterval);
+  const cost = upgrade3Costs[upgrade3BoughtCount];
+  if (condensedLevels >= cost) {
+    condensedLevels -= cost;
+    upgrade3BoughtCount++;
+    // decrease baseXP by 1 each time, min 1
+    baseXP = Math.max(1, baseXP - 1);
     updateCondensedLevelText();
+    updateUpgrade3UI();
     saveProgress();
   } else {
     alert("Not enough Condensed Levels!");
@@ -422,7 +461,9 @@ function saveProgress() {
     condensedLevels,
     upgradeBoughtCount,
     maxLevel,
-    fasterTicksBought
+    fasterTicksBought,
+    upgrade3BoughtCount,
+    baseXP
   }));
 }
 
@@ -435,16 +476,17 @@ function loadProgress() {
     upgradeBoughtCount = data.upgradeBoughtCount || 0;
     maxLevel = data.maxLevel || 10;
     fasterTicksBought = data.fasterTicksBought || false;
+    upgrade3BoughtCount = data.upgrade3BoughtCount || 0;
+    baseXP = (typeof data.baseXP === 'number') ? data.baseXP : 5;
     xpMultiplier = Math.pow(2, upgradeBoughtCount);
     if (fasterTicksBought) {
       tickInterval = 500;
       buyFasterTicksBtn.disabled = true;
-      buyFasterTicksBtn.style.opacity = "0.5";
-      buyFasterTicksBtn.style.cursor = "default";
+      buyFasterTicksBtn.classList.add("disabled-btn");
       buyFasterTicksBtn.previousElementSibling.innerHTML = '<div style="color: gray;">BOUGHT</div>';
     }
     updateXPBar();
-  updateLevelizeButtonText();
+    updateLevelizeButtonText();
     updateCondensedLevelText();
     upgradeCost = Math.floor(1 * Math.pow(3, upgradeBoughtCount));
     upgradeCostSpan.innerText = upgradeCost;
@@ -455,6 +497,7 @@ function loadProgress() {
       levelizeUpgrades.style.display = "block";
       updateLevelizeButtonText();
     }
+    updateUpgrade3UI();
   }
 }
 
