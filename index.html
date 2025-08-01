@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Level Incremental</title>
+  <title>XP Particles with Momentum Loss & Levelize</title>
   <style>
     body {
       margin: 20px;
@@ -66,7 +66,8 @@
       font-weight: bold;
       z-index: 1;
     }
-    #condensed-level-text {
+    #condensed-level-text,
+    #condensed-level-text-levelize {
       margin-bottom: 4px;
       font-weight: bold;
       font-size: 14px;
@@ -166,6 +167,8 @@
 <div id="levelize-tab">
   <div id="collapse-message">Levelize will reset XP and level but gives you Condensed levels, which can be spent on upgrades! Doing this requires at least Level 10.</div>
   <button id="levelize-button">Levelize, requires level 10.</button>
+  <div id="condensed-level-text-levelize">Condensed Levels: 0</div>
+
   <div id="levelize-upgrades" style="display:none;">
     <div class="upgrade-section">
       <div>Upgrade: Double XP Gain</div>
@@ -267,8 +270,17 @@ function updateCondensedLevelText() {
   if (condensedLevels > 0) {
     condensedLevelText.style.display = "block";
     condensedLevelText.innerText = `Condensed Levels: ${condensedLevels}`;
+    const lvlz = document.getElementById("condensed-level-text-levelize");
+    if (lvlz) {
+      lvlz.style.display = "block";
+      lvlz.innerText = `Condensed Levels: ${condensedLevels}`;
+    }
   } else {
     condensedLevelText.style.display = "none";
+    const lvlz = document.getElementById("condensed-level-text-levelize");
+    if (lvlz) {
+      lvlz.style.display = "none";
+    }
   }
 }
 
